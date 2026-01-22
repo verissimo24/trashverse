@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "direction.h"
 
 #define MAX_SHIPS 26
 
@@ -27,19 +28,19 @@ typedef struct {
     float y;
     Vector velocity;       
     Vector acceleration;   
-    int   active;       // 1 if this trash exists, 0 if free slot
+    int   active;       // 1 if this trash is roaming(?), 0 if free slot
 } Trash;
 
 typedef struct {
     float x;
     float y;
-    float radius;
-    char  ship_id;   
-    int   active;       // 1 if ship is in use
-    int   cargo; 
-    uint32_t token;     //used to get access to the ship ID in the universe server 
     Vector velocity;
     Vector acceleration;
+    float radius;
+    int   active;       // 1 if ship is in use
+    char  ship_id;   
+    int   cargo; 
+    uint32_t token;     //used to get access to the ship ID in the universe server 
 } Ship;
 
 typedef struct {
@@ -63,7 +64,6 @@ typedef struct {
     Ship *ships; 
 } Universe;
 
-
 typedef struct {
     char server_address[128];
     int  reqrep_port;
@@ -72,8 +72,9 @@ typedef struct {
     int  height;
 } ClientConfig;
 
-int client_load_from_config(ClientConfig *cfg, const char *filename);
 
+
+int client_load_from_config(ClientConfig *cfg, const char *filename);
 
 
 /**
@@ -172,7 +173,7 @@ int universe_add_ship(Universe *u, char ship_id, uint32_t token);
  * @param ship_id Identifier of the ship to move.
  * @param dir Direction command character ('u', 'd', 'l', 'r').
  */
-void universe_move_ship(Universe *u, char ship_id, char dir);
+void universe_move_ship(Universe *u, char ship_id, direction_t dir);
 
 
 /**

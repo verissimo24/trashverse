@@ -21,8 +21,9 @@ static pthread_mutex_t universe_mtx = PTHREAD_MUTEX_INITIALIZER;  //protect the 
 static int quit = 0;              
 static int game_over = 0;   
 
-static void* physics_thread(void* arg) {
-
+//Thread that applies physics laws periodically(10ms)
+static void* physics_thread() 
+{
     while (1) {
         SDL_Delay(10); //10ms period for physics update
 
@@ -32,17 +33,19 @@ static void* physics_thread(void* arg) {
         physics_step(&universe);
         universe_update_ship_interactions(&universe);
 
+        //checks for universe ending condition
         if (universe.num_trash >= universe.max_trash) {
             game_over = 1;
             quit = 1;
         }
-
         pthread_mutex_unlock(&universe_mtx);
     }
     return NULL;
 }
 
-void* reqrep_thread(void* arg) {
+//Thread that will handle client connection/move messages
+void* reqrep_thread() 
+{
     // ZMQ server channel 
     zmqChannel channel = create_server_channel(universe.reqrep_port);
     if (!channel.sock) {
@@ -54,6 +57,7 @@ void* reqrep_thread(void* arg) {
     }
 
     while (1) {
+
         char message_type[32];
         char client_id = '?';
         direction_t dir = 0;
@@ -61,7 +65,7 @@ void* reqrep_thread(void* arg) {
 
         read_message(channel.sock, message_type, &client_id, &dir, &token);
         if (message_type[0] == '\0') {
-            // (timeout) 
+            // (timeout), checks if a different thread closed
             pthread_mutex_lock(&universe_mtx);
             int q = quit;
             pthread_mutex_unlock(&universe_mtx);
@@ -72,10 +76,12 @@ void* reqrep_thread(void* arg) {
         pthread_mutex_lock(&universe_mtx);
         if (quit) { pthread_mutex_unlock(&universe_mtx); break; }
 
+        // 1) CONNECT message
         if (strcmp(message_type, "CONNECT") == 0) {
 
             //Choose free slot
             int free_idx = -1;
+
             if (!universe.ships) {
                 free_idx = 0; 
             } else {
@@ -94,7 +100,7 @@ void* reqrep_thread(void* arg) {
             client_id = (char)('A' + free_idx);
 
             uint32_t new_token = (uint32_t)rand();
-            if (new_token == 0) new_token = 1;   //we leave the 0 to identify unitialized tokens
+            if (new_token == 0) new_token = 1;   //leave the 0 to identify unitialized tokens
 
             int idx = universe_add_ship(&universe, client_id, new_token);
             if (idx < 0) {
@@ -124,6 +130,7 @@ void* reqrep_thread(void* arg) {
         }
 
 
+        // MOVE message
         if (strcmp(message_type, "MOVE") == 0) {
 
             if (!universe.ships) {
@@ -136,12 +143,13 @@ void* reqrep_thread(void* arg) {
 
             for (int i = 0; i < MAX_SHIPS; ++i) {
                 Ship* s = &universe.ships[i];
-                if ((s->ship_id == client_id) && (s->token == token)) {
+                if ((s->ship_id == client_id) && (s->token == token)) {  //validate client id and token
                     universe_move_ship(&universe, client_id, dir);
                     authorized = 1;
                     break;
                 }
             }
+
             pthread_mutex_unlock(&universe_mtx);
             send_response(channel.sock, authorized ? "OK" : "ERROR");
             continue;
@@ -155,10 +163,9 @@ void* reqrep_thread(void* arg) {
     return NULL;
 }
 
-static void* pub_thread(void* arg)
+//Thread that broadcasts the universe state/stats to the clients/dashboard
+static void* pub_thread()
 {
-    (void)arg;
-
     zmqChannel pub = create_server_pub_channel(universe.pub_port);
 
     if (!pub.sock) {
@@ -169,7 +176,7 @@ static void* pub_thread(void* arg)
         return NULL;
     }
 
-    fprintf(stderr, "PUB thread started on port %d\n", universe.pub_port);
+    fprintf(stdout, "PUB thread started on port %d\n", universe.pub_port);
 
     while (1) {
         SDL_Delay(33);  //30 updates/s
@@ -202,7 +209,7 @@ static void* pub_thread(void* arg)
     return NULL;
 }
 
-enum {
+enum {     //Isto eventualmente vai sair e vou fazer 3 threads extra para dar handle disto.
     UE_TRASH_GEN = 2,       
     UE_RECYCLE_CHANGE = 3,
     UE_DRAW = 4,
@@ -254,12 +261,15 @@ int main(void)
     pthread_t thread_id_pub;
     pthread_create(&thread_id_pub, NULL, pub_thread, NULL);
 
+    // +3 threads em vez dos timers
+
     SDL_Delay(500);  
     fprintf(stderr, "PUB socket should be ready now\n");
 
     int need_draw = 1;
 
     while (1) {
+    
         pthread_mutex_lock(&universe_mtx);
         int local_quit = quit;
         pthread_mutex_unlock(&universe_mtx);

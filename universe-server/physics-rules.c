@@ -226,7 +226,7 @@ void physics_update_ship_velocity(Universe *u)
         Ship *s = &u->ships[si];
         if (!s->active) continue;
 
-        // atrito 1%
+        // friction 1%
         s->velocity.amplitude *= 0.99f;
 
         // v = v + a

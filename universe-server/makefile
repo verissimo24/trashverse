@@ -10,9 +10,9 @@ PROTO       := $(COMMON)/$(PROTO_NAME)
 PB_C        := $(COMMON)/space_trash.pb-c.c
 PB_H        := $(COMMON)/space_trash.pb-c.h
 
-BIN     := new-universe-server
+BIN     := universe-server
 
-OBJS := new-universe-server.o physics-rules.o universe-data.o display.o comm.o space_trash.pb-c.o
+OBJS := universe-server.o physics-rules.o universe-data.o display.o comm.o space_trash.pb-c.o
 
 .PHONY: all clean proto
 
@@ -26,7 +26,7 @@ $(PB_C) $(PB_H): $(PROTO)
 $(BIN): $(OBJS)
 	$(CC) $(CFLAGS) $(SDL_C) -o $@ $^ $(LDLIBS)
 
-new-universe-server.o: new-universe-server.c
+universe-server.o: universe-server.c
 	$(CC) $(CFLAGS) $(SDL_C) -I. -I$(COMMON) -c $< -o $@
 
 physics-rules.o: physics-rules.c physics-rules.h

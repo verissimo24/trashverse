@@ -3,11 +3,12 @@
 
 #include "universe-data.h"
 
+void physics_step(Universe *u);
+
 void physics_update_acceleration(Universe *u);
 void physics_update_velocity(Universe *u);
 void physics_update_position(Universe *u);
 
-void physics_step(Universe *u);
 
 void physics_handle_collisions(Universe *u);
 

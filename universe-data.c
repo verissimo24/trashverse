@@ -1,5 +1,4 @@
 #include "universe-data.h"
-#include "direction.h"
 
 #include <stdio.h>
 #include <stdlib.h>
