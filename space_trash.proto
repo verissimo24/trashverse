@@ -1,0 +1,106 @@
+syntax = "proto2";
+
+// Direction options 
+enum Direction {
+  DIR_UP    = 0;
+  DIR_DOWN  = 1;
+  DIR_LEFT  = 2;
+  DIR_RIGHT = 3;
+}
+
+// Sent from client to server when a new player joins.
+message ClientConnect {
+}
+
+// Sent from client to server when player presses a key.
+message ClientMove {
+  required string   ship_id = 1;
+  required Direction dir    = 2;
+  required uint32 token   = 3;   
+}
+
+// Sent from client to server when player is leaving.
+message ClientQuit {
+  required string ship_id = 1;
+  required uint32 token   = 2;
+}
+
+// Wrapper so we can send either connect or move as one top-level message.
+message ClientMessage {
+  oneof kind {
+    ClientConnect connect = 1;
+    ClientMove    move    = 2;
+    ClientQuit    quit    = 3;
+  }
+}
+
+// Simple reply from server 
+message ServerAck {
+  required bool   ok  = 1;       // true if server accepted the command
+  optional string msg = 2;       // optional status text
+  optional string ship_id = 3;   
+  optional uint32 token   = 4;
+}
+
+
+
+// ---------- Server PUB snapshot ----------
+
+message PlanetState {
+  required uint32 id               = 1; // 0..num_planets-1
+  required uint32 name_ascii       = 2; // e.g. 'A' = 65
+  required float  x                = 3;
+  required float  y                = 4;
+  required bool   recycle          = 5;
+  optional uint32 trash_count      = 6; // total recycled on this planet
+}
+
+message TrashState {
+  required float x = 1;
+  required float y = 2;
+}
+
+message ShipState {
+  required uint32 ship_ascii       = 1; // e.g. 'A' = 65
+  required bool   active           = 2;
+  required float  x                = 3;
+  required float  y                = 4;
+  required float  v_amplitude      = 5;
+  required float  v_angle          = 6;
+  required uint32 cargo            = 7;
+  required uint32 capacity         = 8;
+}
+
+message UniverseState {
+  required uint32 width            = 1;
+  required uint32 height           = 2;
+  required uint32 max_trash        = 3;
+  required uint32 recycling_planet = 4; // index
+  required bool   game_over        = 5;
+
+  repeated PlanetState planets     = 6;
+  repeated TrashState  trash       = 7; // only active trash
+  repeated ShipState   ships       = 8; // all slots with active flag
+}
+
+
+// ---------- Server PUB lightweight stats (for dashboard) ----------
+
+message PlanetStats {
+  required uint32 name_ascii = 1;   // e.g. 'A' = 65
+  required uint32 recycled   = 2;   // total recycled on this planet
+}
+
+message ShipStats {
+  required uint32 ship_ascii = 1;   // e.g. 'A' = 65
+  required bool   active     = 2;
+  required uint32 cargo      = 3;   // current cargo
+}
+
+message UniverseStats {
+  required uint32 roaming     = 1;  // number of active trash
+  required uint32 max_roaming = 2;  // max allowed trash
+  repeated PlanetStats planets = 3;
+  repeated ShipStats   ships   = 4;
+  required bool game_over = 5;
+}
