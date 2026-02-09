@@ -5,15 +5,12 @@
 
 void physics_step(Universe *u);
 
-void physics_update_acceleration(Universe *u);
-void physics_update_velocity(Universe *u);
-void physics_update_position(Universe *u);
+Vector physics_update_acceleration(float x, float y, int N, Planet *planets);
+Vector physics_update_velocity(Vector v, Vector a);
+Coordinates physics_update_position(Coordinates position, Vector velocity, int width, int height);
 
 
-void physics_handle_collisions(Universe *u);
 
-void physics_update_ship_acceleration(Universe *u);
-void physics_update_ship_velocity(Universe *u);
-void physics_update_ship_position(Universe *u);
+
 
 #endif // PHYSICS_RULES_H

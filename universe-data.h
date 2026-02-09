@@ -14,8 +14,12 @@ typedef struct {
 } Vector;
 
 typedef struct {
-    float x;
-    float y;
+    float x;  
+    float y;       
+} Coordinates;
+
+typedef struct {
+    Coordinates position;
     float radius;
     float mass;
     char  planet_name;
@@ -24,16 +28,14 @@ typedef struct {
 } Planet;
 
 typedef struct {
-    float x;
-    float y;
+    Coordinates position;
     Vector velocity;       
     Vector acceleration;   
     int   active;       // 1 if this trash is roaming(?), 0 if free slot
 } Trash;
 
 typedef struct {
-    float x;
-    float y;
+    Coordinates position;
     Vector velocity;
     Vector acceleration;
     float radius;
@@ -142,6 +144,8 @@ int universe_add_trash(Universe *u);
  * @param index Index of the trash slot to be activated in the universe.
  */
 void universe_spawn_trash(Universe *u, int index);
+
+void universe_handle_trash_collisions(Universe *u);
 
 
 /**

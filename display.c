@@ -120,8 +120,8 @@ void display_draw_planets(const Display *d, const Universe *u)
         // Draws the planet
         filledCircleColor(  
             d->renderer,
-            (Sint16)p->x,
-            (Sint16)p->y,
+            (Sint16)p->position.x,
+            (Sint16)p->position.y,
             (Sint16)p->radius,
             planet_color
         );
@@ -132,8 +132,8 @@ void display_draw_planets(const Display *d, const Universe *u)
         //prints planet name
         stringColor(
             d->renderer,
-            (Sint16)(p->x + p->radius + 4),  // x position
-            (Sint16)(p->y - 4),              // y position
+            (Sint16)(p->position.x + p->radius + 4),  // x position
+            (Sint16)(p->position.y - 4),              // y position
             label,
             text_color
         );
@@ -154,10 +154,10 @@ void display_draw_trash(const Display *d, const Universe *u)
         //draws square
         boxColor(
             d->renderer,
-            (Sint16)t->x,
-            (Sint16)t->y,
-            (Sint16)(t->x + size),
-            (Sint16)(t->y + size),
+            (Sint16)t->position.x,
+            (Sint16)t->position.y,
+            (Sint16)(t->position.x + size),
+            (Sint16)(t->position.y + size),
             0xFFFFFFFF    // white
         );
     }
@@ -175,8 +175,8 @@ void display_draw_ships(const Display *d, const Universe *u)
         Uint32 ship_color = 0xFFFFFFFF;  // blue
         Uint32 text_color = 0xFFFFFFFF;  // white
 
-        int cx = (int)s->x;
-        int cy = (int)s->y;
+        int cx = (int)s->position.x;
+        int cy = (int)s->position.y;
 
         //size of the ship
         int r = (int)s->radius;

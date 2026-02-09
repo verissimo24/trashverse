@@ -48,14 +48,31 @@ static float correct_position(float coord, float limit)
  */
 void physics_step(Universe *u)
 {
-    physics_update_acceleration(u);
-    physics_update_velocity(u);
-    physics_update_position(u);
-    physics_handle_collisions(u);
 
-    physics_update_ship_acceleration(u);
-    physics_update_ship_velocity(u);
-    physics_update_ship_position(u);
+    if (!u) return;
+
+    if(u->trash){
+        for (int n_trash = 0; n_trash < u->max_trash; n_trash++) 
+        {
+            Trash *t = &u->trash[n_trash];
+            if (!t->active) continue;
+
+            t->acceleration = physics_update_acceleration(t->position.x, t->position.y, u->num_planets, u->planets);
+            t->velocity = physics_update_velocity(t->velocity, t->acceleration);
+            t->position = physics_update_position(t->position, t->velocity, u->width, u->height);
+        }
+    }
+
+    if(u->ships){
+        for (int n_ship = 0; n_ship < MAX_SHIPS; n_ship++) 
+        {
+            Ship *s = &u->ships[n_ship];
+            if (!s->active) continue;
+            s->acceleration = physics_update_acceleration(s->position.x, s->position.y, u->num_planets, u->planets);
+            s->velocity = physics_update_velocity(s->velocity, s->acceleration);
+            s->position = physics_update_position(s->position, s->velocity, u->width, u->height);
+        }
+    }
 }
 
 
@@ -68,41 +85,34 @@ void physics_step(Universe *u)
  *  - Amplitude is mass / r^2.
  *  - The result is stored in trash[n_trash].acceleration.
  */
-void physics_update_acceleration(Universe *u)
+Vector physics_update_acceleration(float x, float y, int N, Planet *planets)
 {
-    if (!u || !u->trash || !u->planets) return;
+    
+    Vector total_vector_force;
+    total_vector_force.amplitude = 0.0f;
+    total_vector_force.angle     = 0.0f;
 
-    for (int n_trash = 0; n_trash < u->max_trash; n_trash++) {
-        Trash *t = &u->trash[n_trash];
-        if (!t->active) continue;
+    for (int i = 0; i < N; i++) {
+        Planet *p = &planets[i];
 
-        Vector total_vector_force;
-        total_vector_force.amplitude = 0.0f;
-        total_vector_force.angle     = 0.0f;
+        float force_vector_x = p->position.x - x;
+        float force_vector_y = p->position.y - y;
 
-        for (int n_planet = 0; n_planet < u->num_planets; n_planet++) {
-            Planet *p = &u->planets[n_planet];
+        Vector local_vector_force = make_vector(force_vector_x,
+                                                force_vector_y);
 
-            float force_vector_x = p->x - t->x;
-            float force_vector_y = p->y - t->y;
+        // avoid division by zero
+        if (local_vector_force.amplitude < 1.0f)
+            local_vector_force.amplitude = 1.0f;
 
-            Vector local_vector_force = make_vector(force_vector_x,
-                                                    force_vector_y);
+        // amplitude = mass / r^2  (from spec)
+        local_vector_force.amplitude =
+            p->mass / (local_vector_force.amplitude * local_vector_force.amplitude);
 
-            // avoid division by zero
-            if (local_vector_force.amplitude < 1.0f)
-                local_vector_force.amplitude = 1.0f;
-
-            // amplitude = mass / r^2  (from spec)
-            local_vector_force.amplitude =
-                p->mass / (local_vector_force.amplitude * local_vector_force.amplitude);
-
-            total_vector_force = add_vectors(local_vector_force,
-                                             total_vector_force);
-        }
-
-        t->acceleration = total_vector_force;
+        total_vector_force = add_vectors(local_vector_force, total_vector_force);
     }
+
+    return total_vector_force;
 }
 
 /*
@@ -114,20 +124,13 @@ void physics_update_acceleration(Universe *u)
  *
  * The spec version does not use dt explicitly, so we ignore it.
  */
-void physics_update_velocity(Universe *u)
-{
-    if (!u || !u->trash) return;
+Vector physics_update_velocity(Vector v, Vector a)
+{    
+    // friction
+    v.amplitude *= 0.99f;
 
-    for (int n_trash = 0; n_trash < u->max_trash; n_trash++) {
-        Trash *t = &u->trash[n_trash];
-        if (!t->active) continue;
-
-        // friction
-        t->velocity.amplitude *= 0.99f;
-
-        // v = v + a (both are vectors in amplitude/angle form)
-        t->velocity = add_vectors(t->velocity, t->acceleration);
-    }
+    // v = v + a (both are vectors in amplitude/angle form)
+    return  add_vectors(v, a);
 }
 
 /*
@@ -138,116 +141,13 @@ void physics_update_velocity(Universe *u)
  *   y += v.amplitude * sin(v.angle)
  *   correct_position(x), correct_position(y)
  */
-void physics_update_position(Universe *u)
+Coordinates physics_update_position(Coordinates position, Vector velocity, int width, int height)
 {
-    if (!u || !u->trash) return;
+    position.x += velocity.amplitude * cosf(velocity.angle);
+    position.y += velocity.amplitude * sinf(velocity.angle);
 
-    for (int n_trash = 0; n_trash < u->max_trash; n_trash++) {
-        Trash *t = &u->trash[n_trash];
-        if (!t->active) continue;
+    position.x = correct_position(position.x, (float)width);
+    position.y = correct_position(position.y, (float)height);
 
-        t->x += t->velocity.amplitude * cosf(t->velocity.angle);
-        t->y += t->velocity.amplitude * sinf(t->velocity.angle);
-
-        t->x = correct_position(t->x, (float)u->width);
-        t->y = correct_position(t->y, (float)u->height);
-    }
+    return position;
 }
-
-/**
- * Handles colision of trash on planets.
- *
- * When a trash piece reaches the center of a planet (distance < 1.0),
- * we respawn it somewhere else using universe_respawn_trash().
- */
-void physics_handle_collisions(Universe *u)
-{
-    if (!u || !u->trash || !u->planets) return;
-
-    for (int i = 0; i < u->max_trash; i++) {
-        Trash *t = &u->trash[i];
-        if (!t->active) continue;
-
-        for (int p = 0; p < u->num_planets; p++) {
-            Planet *pl = &u->planets[p];
-
-            float dx = pl->x - t->x;
-            float dy = pl->y - t->y;
-            float dist2 = dx * dx + dy * dy;
-            float dist  = sqrtf(dist2);
-
-            //Check if it colided with planet and if there are active ships
-            if ((dist < 1.0f) && (u->num_ships>0)) {
-                universe_add_trash(u);
-                break;  // done with this trash
-            }
-        }
-    }
-}
-
-
-
-void physics_update_ship_acceleration(Universe *u)
-{
-    if (!u || !u->ships || !u->planets) return;
-
-    for (int si = 0; si < MAX_SHIPS; ++si) {
-        Ship *s = &u->ships[si];
-        if (!s->active) continue;
-
-        Vector total;
-        total.amplitude = 0.0f;
-        total.angle     = 0.0f;
-
-        for (int pi = 0; pi < u->num_planets; ++pi) {
-            Planet *p = &u->planets[pi];
-
-            float dx = p->x - s->x;
-            float dy = p->y - s->y;
-
-            Vector local = make_vector(dx, dy);
-
-            if (local.amplitude < 1.0f) local.amplitude = 1.0f;
-
-            local.amplitude = p->mass / (local.amplitude * local.amplitude);
-
-            total = add_vectors(local, total);
-        }
-
-        s->acceleration = total;
-    }
-}
-
-void physics_update_ship_velocity(Universe *u)
-{
-    if (!u || !u->ships) return;
-
-    for (int si = 0; si < MAX_SHIPS; ++si) {
-        Ship *s = &u->ships[si];
-        if (!s->active) continue;
-
-        // friction 1%
-        s->velocity.amplitude *= 0.99f;
-
-        // v = v + a
-        s->velocity = add_vectors(s->velocity, s->acceleration);
-    }
-}
-
-void physics_update_ship_position(Universe *u)
-{
-    if (!u || !u->ships) return;
-
-    for (int si = 0; si < MAX_SHIPS; ++si) {
-        Ship *s = &u->ships[si];
-        if (!s->active) continue;
-
-        s->x += s->velocity.amplitude * cosf(s->velocity.angle);
-        s->y += s->velocity.amplitude * sinf(s->velocity.angle);
-
-        s->x = correct_position(s->x, (float)u->width);
-        s->y = correct_position(s->y, (float)u->height);
-    }
-}
-
-

@@ -75,8 +75,8 @@ static void apply_state_to_view(Universe *u, const UniverseState *st)
             const PlanetState *ps = st->planets[i];
             Planet *p = &u->planets[i];
 
-            p->x = ps->x;
-            p->y = ps->y;
+            p->position.x = ps->x;
+            p->position.y = ps->y;
             p->radius = 20.0f;          
             p->mass   = 100.0f;        
             p->planet_name = (char)ps->name_ascii;
@@ -93,8 +93,8 @@ static void apply_state_to_view(Universe *u, const UniverseState *st)
         for (size_t i = 0; i < st->n_trash && k < (size_t)u->max_trash; ++i, ++k) {
             const TrashState *ts = st->trash[i];
             u->trash[k].active = 1;
-            u->trash[k].x = ts->x;
-            u->trash[k].y = ts->y;
+            u->trash[k].position.x = ts->x;
+            u->trash[k].position.y = ts->y;
         }
     }
 
@@ -117,8 +117,8 @@ static void apply_state_to_view(Universe *u, const UniverseState *st)
             Ship *s = &u->ships[idx];
             s->ship_id = (char)ss->ship_ascii;
             s->active  = ss->active ? 1 : 0;
-            s->x       = ss->x;
-            s->y       = ss->y;
+            s->position.x       = ss->x;
+            s->position.y       = ss->y;
             s->radius  = 8.0f;
             s->cargo   = (int)ss->cargo;
             s->velocity.amplitude = ss->v_amplitude;

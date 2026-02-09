@@ -32,6 +32,7 @@ void* physics_thread()
         pthread_mutex_lock(&universe_mtx);
         
         physics_step(&universe);
+        universe_handle_trash_collisions(&universe);
         universe_update_ship_interactions(&universe);
 
         //checks for universe ending condition
@@ -329,8 +330,6 @@ int main(void)
 
         SDL_Delay(33);
     }
-
-
 
     pthread_mutex_lock(&universe_mtx);
     display_show_game_over(&display, &universe);

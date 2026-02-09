@@ -135,8 +135,8 @@ void universe_create_planets(Universe *u)
         p->mass   = 10.0f;
 
         // Random positioning inside window boundaries
-        p->x = (float)(rand() % u->width);
-        p->y = (float)(rand() % u->height);
+        p->position.x = (float)(rand() % u->width);
+        p->position.y = (float)(rand() % u->height);
 
         // Assign letter (A-Z) name to planet
         // When all letters are used it starts from the beggining again
@@ -178,8 +178,8 @@ void universe_create_trash(Universe *u)
     // create the initial_trash elements at random positions within window boundaries
     u->num_trash = u->initial_trash;
     for (int i = 0; i < u->initial_trash && i < u->max_trash; ++i) {
-        u->trash[i].x = (float)(rand() % u->width);
-        u->trash[i].y = (float)(rand() % u->height);
+        u->trash[i].position.x = (float)(rand() % u->width);
+        u->trash[i].position.y = (float)(rand() % u->height);
         u->trash[i].active = 1;
     }
 }
@@ -210,8 +210,8 @@ void universe_spawn_trash(Universe *u, int index)
     Trash *t = &u->trash[index];
 
     //Random postition within universe boundaries
-    t->x = (float)(rand() % u->width);
-    t->y = (float)(rand() % u->height);
+    t->position.x = (float)(rand() % u->width);
+    t->position.y = (float)(rand() % u->height);
 
     t->velocity.amplitude      = 0.0f;
     t->velocity.angle          = 0.0f;
@@ -221,6 +221,37 @@ void universe_spawn_trash(Universe *u, int index)
     t->active = 1;
 }
 
+
+/**
+ * Handles colision of trash on planets.
+ *
+ * When a trash piece reaches the center of a planet (distance < 1.0),
+ * we respawn it somewhere else using universe_respawn_trash().
+ */
+void universe_handle_trash_collisions(Universe *u)
+{
+    if (!u || !u->trash || !u->planets) return;
+
+    for (int i = 0; i < u->max_trash; i++) {
+        Trash *t = &u->trash[i];
+        if (!t->active) continue;
+
+        for (int p = 0; p < u->num_planets; p++) {
+            Planet *pl = &u->planets[p];
+
+            float dx = pl->position.x - t->position.x;
+            float dy = pl->position.y - t->position.y;
+            float dist2 = dx * dx + dy * dy;
+            float dist  = sqrtf(dist2);
+
+            //Check if it colided with planet and if there are active ships
+            if ((dist < 1.0f) && (u->num_ships>0)) {
+                universe_add_trash(u);
+                break;  // done with this trash
+            }
+        }
+    }
+}
 
 int universe_add_ship(Universe *u, char ship_id, uint32_t token)
 {
@@ -237,8 +268,8 @@ int universe_add_ship(Universe *u, char ship_id, uint32_t token)
         for (int i = 0; i < MAX_SHIPS; ++i) {
             u->ships[i].active  = 0;
             u->ships[i].ship_id = '?';
-            u->ships[i].x       = 0.0f;
-            u->ships[i].y       = 0.0f;
+            u->ships[i].position.x       = 0.0f;
+            u->ships[i].position.y       = 0.0f;
             u->ships[i].radius  = 8.0f;
             u->ships[i].cargo   = 0;
             u->ships[i].token   = 0;
@@ -274,8 +305,8 @@ int universe_add_ship(Universe *u, char ship_id, uint32_t token)
     s->acceleration.angle     = 0.0f;
 
     // spawn in the middle of the universe
-    s->x = u->width  * 0.5f;
-    s->y = u->height * 0.5f;
+    s->position.x = u->width  * 0.5f;
+    s->position.y = u->height * 0.5f;
 
     int active = 0;
     for (int i = 0; i < MAX_SHIPS; ++i) if (u->ships[i].active) active++;
@@ -346,8 +377,8 @@ void universe_update_ship_interactions(Universe *u)
                 if (!t->active) continue;
 
                 //Calculates distance between trash and ship
-                float dx = s->x - t->x;
-                float dy = s->y - t->y;
+                float dx = s->position.x - t->position.x;
+                float dy = s->position.y - t->position.y;
                 float dist2 = sqr(dx) + sqr(dy);
                 float limit = s->radius + trash_radius;
 
@@ -372,8 +403,8 @@ void universe_update_ship_interactions(Universe *u)
                 Planet *p = &u->planets[pi];
 
                 //Calculates distance between ship and planet
-                float dx = s->x - p->x;
-                float dy = s->y - p->y;
+                float dx = s->position.x - p->position.x;
+                float dy = s->position.y - p->position.y;
                 float dist2   = sqr(dx) + sqr(dy);
                 float limit   = s->radius + p->radius;
 
@@ -454,8 +485,8 @@ int universe_remove_ship(Universe *u, char ship_id, uint32_t token)
     s->cargo  = 0;
     s->token  = 0;
 
-    s->x = 0.0f;
-    s->y = 0.0f;
+    s->position.x = 0.0f;
+    s->position.y = 0.0f;
 
     s->velocity.amplitude = 0.0f;
     s->velocity.angle     = 0.0f;

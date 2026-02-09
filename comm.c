@@ -437,8 +437,8 @@ int comm_pub_send_universe_state(void *pub_sock, const Universe *u, int game_ove
             const Planet *p = &u->planets[i];
             p_msgs[i].id          = (uint32_t)i;
             p_msgs[i].name_ascii  = (uint32_t)(unsigned char)p->planet_name;
-            p_msgs[i].x           = p->x;
-            p_msgs[i].y           = p->y;
+            p_msgs[i].x           = p->position.x;
+            p_msgs[i].y           = p->position.y;
             p_msgs[i].recycle     = p->recycle ? 1 : 0;
             p_msgs[i].trash_count = (uint32_t)p->trash_count;
             p_msgs[i].has_trash_count = 1;
@@ -469,8 +469,8 @@ int comm_pub_send_universe_state(void *pub_sock, const Universe *u, int game_ove
 
             t_msgs[k] = (TrashState)TRASH_STATE__INIT;
             t_ptrs[k] = &t_msgs[k];
-            t_msgs[k].x = t->x;
-            t_msgs[k].y = t->y;
+            t_msgs[k].x = t->position.x;
+            t_msgs[k].y = t->position.y;
 
             if (++k == nt) break;
         }
@@ -498,8 +498,8 @@ int comm_pub_send_universe_state(void *pub_sock, const Universe *u, int game_ove
             const Ship *s = &u->ships[i];
             s_msgs[i].ship_ascii  = (uint32_t)(unsigned char)s->ship_id;
             s_msgs[i].active      = s->active ? 1 : 0;
-            s_msgs[i].x           = s->x;
-            s_msgs[i].y           = s->y;
+            s_msgs[i].x           = s->position.x;
+            s_msgs[i].y           = s->position.y;
             s_msgs[i].v_amplitude = s->velocity.amplitude;
             s_msgs[i].v_angle     = s->velocity.angle;
             s_msgs[i].cargo       = (uint32_t)s->cargo;
