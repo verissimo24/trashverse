@@ -298,6 +298,8 @@ void display_show_game_over(const Display *d, const Universe *u)
     stringColor(d->renderer, x,   y+1, msg, text_color);
 
     SDL_RenderPresent(d->renderer);
+
+    SDL_Delay(3000);
 }
 
 

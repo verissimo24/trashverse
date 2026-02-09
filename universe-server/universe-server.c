@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -6,6 +7,7 @@
 #include <zmq.h>   
 #include <SDL2/SDL_timer.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "universe-data.h"  
 #include "display.h"
@@ -16,32 +18,84 @@ static Universe universe;
 static Display display;
 
 static pthread_mutex_t universe_mtx = PTHREAD_MUTEX_INITIALIZER;  //protect the access to the universe
+static pthread_cond_t universe_cv = PTHREAD_COND_INITIALIZER;
 
-//global flags
-static int quit = 0;              
-static int game_over = 0;   
+//global flag
+static int quit = 0;                
 
 //Thread that applies physics laws periodically(10ms)
-static void* physics_thread() 
+void* physics_thread() 
 {
-    while (1) {
+    while (!quit) {
         SDL_Delay(10); //10ms period for physics update
 
         pthread_mutex_lock(&universe_mtx);
-        if (quit) { pthread_mutex_unlock(&universe_mtx); break; }
-
+        
         physics_step(&universe);
         universe_update_ship_interactions(&universe);
 
         //checks for universe ending condition
         if (universe.num_trash >= universe.max_trash) {
-            game_over = 1;
             quit = 1;
+            pthread_cond_broadcast(&universe_cv);
         }
         pthread_mutex_unlock(&universe_mtx);
     }
     return NULL;
 }
+
+//Adds a new trash to the universe every 10 seconds (if there is at least one active ship)
+void* trash_thread()
+{
+    SDL_Delay(10000); //Wait 10 seconds to start
+
+    pthread_mutex_lock(&universe_mtx);
+
+    while (!quit) {
+
+        if (universe.num_ships > 0) {
+            universe_add_trash(&universe);
+        }
+
+        // calculate time instant +10s
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 10;
+
+        //Waits for 10 seconds
+        pthread_cond_timedwait(&universe_cv, &universe_mtx, &ts); 
+    }
+
+    pthread_mutex_unlock(&universe_mtx);
+    return NULL;
+}
+
+
+//Changes the recycle planet periodically(30s)
+void* change_recycle_thread()
+{
+    SDL_Delay(30000); //Wait 30 seconds to start
+
+    pthread_mutex_lock(&universe_mtx);
+
+    while (!quit) 
+    {
+        universe_change_recycling_planet(&universe);
+
+        // calculate time instant +30s
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 30;
+
+        //Waits for 30 seconds
+        pthread_cond_timedwait(&universe_cv, &universe_mtx, &ts);
+
+    }
+
+    pthread_mutex_unlock(&universe_mtx);
+    return NULL;
+}
+
 
 //Thread that will handle client connection/move messages
 void* reqrep_thread() 
@@ -52,12 +106,13 @@ void* reqrep_thread()
         fprintf(stderr, "Failed to create server channel\n");
         pthread_mutex_lock(&universe_mtx);
         quit = 1;
+        pthread_cond_broadcast(&universe_cv);
         pthread_mutex_unlock(&universe_mtx);
         return NULL;
     }
 
-    while (1) {
-
+    while (1) 
+    {
         char message_type[32];
         char client_id = '?';
         direction_t dir = 0;
@@ -172,6 +227,7 @@ static void* pub_thread()
         fprintf(stderr, "Failed to create PUB channel\n");
         pthread_mutex_lock(&universe_mtx);
         quit = 1;
+        pthread_cond_broadcast(&universe_cv);
         pthread_mutex_unlock(&universe_mtx);
         return NULL;
     }
@@ -183,13 +239,12 @@ static void* pub_thread()
 
         pthread_mutex_lock(&universe_mtx);
         int local_quit = quit;
-        int local_go   = game_over;
 
         //sends universe state to the clients
-        comm_pub_send_universe_state(pub.sock, &universe, local_go);
+        comm_pub_send_universe_state(pub.sock, &universe, local_quit);
 
         //sends universe stats to the dashboard
-        comm_pub_send_universe_stats(pub.sock, &universe, local_go);
+        comm_pub_send_universe_stats(pub.sock, &universe, local_quit);
 
         pthread_mutex_unlock(&universe_mtx);
 
@@ -209,23 +264,6 @@ static void* pub_thread()
     return NULL;
 }
 
-enum {     //Isto eventualmente vai sair e vou fazer 3 threads extra para dar handle disto.
-    UE_TRASH_GEN = 2,       
-    UE_RECYCLE_CHANGE = 3,
-    UE_DRAW = 4,
-};
-
-static Uint32 timer_callback(Uint32 interval, void *param)
-{
-    SDL_Event ev;
-    SDL_zero(ev);
-    ev.type = SDL_USEREVENT;
-    ev.user.code = (int)(intptr_t)param;   
-    ev.user.data1 = NULL;
-    ev.user.data2 = NULL;
-    SDL_PushEvent(&ev);
-    return interval; 
-}
 
 int main(void)
 {
@@ -248,111 +286,66 @@ int main(void)
         return 1;
     }
 
-    SDL_TimerID trash_timer   = SDL_AddTimer(10000, timer_callback, (void*)(intptr_t)UE_TRASH_GEN);
-    SDL_TimerID recycle_timer = SDL_AddTimer(30000, timer_callback, (void*)(intptr_t)UE_RECYCLE_CHANGE);
-    SDL_TimerID draw_timer = SDL_AddTimer(33, timer_callback, (void*)(intptr_t)UE_DRAW);
-    
+
     pthread_t thread_id_step;
     pthread_create(&thread_id_step, NULL, physics_thread, NULL);
+
+    pthread_t thread_id_trash;
+    pthread_create(&thread_id_trash, NULL, trash_thread, NULL);
+    
+    pthread_t thread_id_change_recycle;
+    pthread_create(&thread_id_change_recycle, NULL, change_recycle_thread, NULL);
     
     pthread_t thread_id_rep;
     pthread_create(&thread_id_rep, NULL, reqrep_thread, NULL);
-
+    
     pthread_t thread_id_pub;
     pthread_create(&thread_id_pub, NULL, pub_thread, NULL);
 
-    // +3 threads em vez dos timers
 
-    SDL_Delay(500);  
-    fprintf(stderr, "PUB socket should be ready now\n");
+    SDL_Delay(500);  //To make sure that the sockets are ready
 
-    int need_draw = 1;
 
     while (1) {
-    
         pthread_mutex_lock(&universe_mtx);
         int local_quit = quit;
         pthread_mutex_unlock(&universe_mtx);
         if (local_quit) break;
 
-        // 1) Handle SDL events (window + our timer events)
         SDL_Event e;
-        SDL_WaitEvent(&e);
-        do{
-            switch (e.type) {
-
-                case SDL_QUIT:
-                    pthread_mutex_lock(&universe_mtx);
-                    quit = 1;
-                    pthread_mutex_unlock(&universe_mtx);
-                    break;
-
-                case SDL_USEREVENT:
-                    if (e.user.code == UE_TRASH_GEN) {
-                        // 10s: periodic trash generation (only if ships exist)
-                        pthread_mutex_lock(&universe_mtx);
-                        if (universe.num_ships > 0) {
-                            universe_add_trash(&universe);
-                        }
-                        pthread_mutex_unlock(&universe_mtx);
-                    }
-                    else if (e.user.code == UE_RECYCLE_CHANGE) {
-                        // 30s: change recycling planet
-                        pthread_mutex_lock(&universe_mtx);
-                        universe_change_recycling_planet(&universe);
-                        pthread_mutex_unlock(&universe_mtx);
-                    }
-                    else if (e.user.code == UE_DRAW) {
-                        // 30Hz:draw
-                        need_draw = 1;
-                        //display_draw_universe(&display, &universe);
-                    }
-                    break;
-
-                default:
-                    break;
-            } 
-        }while (SDL_PollEvent(&e));
-
-        //5) Draw only when the 30Hz draw timer allows it
-        if (need_draw) {
-            pthread_mutex_lock(&universe_mtx);
-            display_draw_universe(&display, &universe);
-            pthread_mutex_unlock(&universe_mtx);
-            need_draw = 0;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                pthread_mutex_lock(&universe_mtx);
+                quit = 1;
+                pthread_cond_broadcast(&universe_cv);
+                pthread_mutex_unlock(&universe_mtx);
+            }
         }
 
-        // Small sleep to avoid 100% CPU spinning
-        SDL_Delay(1);
-    }
-
-    // End of the world show game over
-    pthread_mutex_lock(&universe_mtx);
-    int go = game_over;
-    pthread_mutex_unlock(&universe_mtx);
-
-    if (go) {
+        // desenha a ~30 fps
         pthread_mutex_lock(&universe_mtx);
-        display_show_game_over(&display, &universe);
+        display_draw_universe(&display, &universe);
         pthread_mutex_unlock(&universe_mtx);
 
-        SDL_Delay(2000); 
+        SDL_Delay(33);
     }
 
 
+
+    pthread_mutex_lock(&universe_mtx);
+    display_show_game_over(&display, &universe);
+    pthread_mutex_unlock(&universe_mtx);
+    
+    pthread_join(thread_id_step, NULL);
+    pthread_join(thread_id_trash, NULL);
+    pthread_join(thread_id_change_recycle, NULL);  
     pthread_join(thread_id_rep, NULL);
     pthread_join(thread_id_pub, NULL);
-    pthread_join(thread_id_step, NULL);
     
 
     //destroy_channel(&channel);
     display_shutdown(&display);
     universe_destroy(&universe);
-
-    SDL_RemoveTimer(trash_timer);
-    SDL_RemoveTimer(recycle_timer);
-    SDL_RemoveTimer(draw_timer);
-
     
     return 0;
 }
