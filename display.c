@@ -172,7 +172,7 @@ void display_draw_ships(const Display *d, const Universe *u)
         const Ship *s = &u->ships[i];
         if (!s->active) continue;
 
-        Uint32 ship_color = 0xFFFFFFFF;  // blue
+        Uint32 ship_color = 0xFFFF8000;  // blue
         Uint32 text_color = 0xFFFFFFFF;  // white
 
         int cx = (int)s->position.x;

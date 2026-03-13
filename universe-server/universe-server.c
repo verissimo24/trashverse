@@ -71,7 +71,6 @@ void* trash_thread()
     return NULL;
 }
 
-
 //Changes the recycle planet periodically(30s)
 void* change_recycle_thread()
 {
